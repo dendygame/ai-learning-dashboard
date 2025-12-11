@@ -120,7 +120,7 @@ elif page == "2. AI Usage Habits (Tools & Modes)":
             counts_df.columns = ['No', 'Yes']
             counts_df = counts_df.sort_values(by='Yes', ascending=False)
             fig, ax = plt.subplots(figsize=(10, 6))
-            counts_df.plot(kind='bar', stacked=True, color=['#ff9999', '#66b3ff'], ax=ax, width=0.7)
+            counts_df.plot(kind='bar', stacked=True, color=['#d9dddc', '#8BCC45'], ax=ax, width=0.7)
             ax.legend(title='Response', labels=['Non-User', 'User'])
             st.pyplot(fig)
 
@@ -217,3 +217,4 @@ elif page == "4. Respondents’ description of their AI usage (Tables)":
         "Table 5: Future Expectations of AI in Higher Education (EAI)",
         "table5.png"
     )
+
