@@ -7,9 +7,9 @@ import os
 # Set page config
 st.set_page_config(page_title="AI Usage & Academic Outcomes Dashboard", layout="wide")
 
-# --- UPDATED TITLE ---
+# --- TITLE ---
 st.title("Data Analysis Dashboard: Navigating Learning with AI: Usage Patterns and Academic Outcomes of IT Students of NEUST Talavera Off-Campus")
-st.markdown("Analyze custom relationships by performing Visualizations.")
+st.markdown("Analyze correlation trends, mean values, and custom relationships.")
 
 # --- HELPER: Categorize Grades ---
 def categorize_grade(grade):
@@ -347,7 +347,8 @@ if df is not None:
             st.markdown("---")
             col_lik_1, col_lik_2 = st.columns(2)
             with col_lik_1:
-                likert_label_mode = st.radio("Response Labels:", ["Text Categories (Strongly Disagree...)", "Numeric Values (1-5)"])
+                # --- NEW OPTION ADDED HERE ---
+                likert_label_mode = st.radio("Response Labels:", ["Likert 5-Point (Strongly Disagree...)", "Binary (No / Yes)", "Numeric Values"])
             with col_lik_2:
                 likert_val_type = st.selectbox("Value Type:", ["Count", "Percentage"])
 
@@ -379,9 +380,15 @@ if df is not None:
 
                 melted = subset.melt(id_vars=['Grade Category'], var_name="Question", value_name="Response")
                 
-                if likert_label_mode == "Text Categories (Strongly Disagree...)":
+                # --- UPDATED MAPPING LOGIC ---
+                if likert_label_mode == "Likert 5-Point (Strongly Disagree...)":
                     melted["Response"] = pd.to_numeric(melted["Response"], errors='coerce').map(likert_mapping).fillna("Unknown")
                     melted["Response"] = pd.Categorical(melted["Response"], categories=likert_order + ["Unknown"], ordered=True)
+                
+                elif likert_label_mode == "Binary (No / Yes)":
+                    binary_map = {0: "No", 1: "Yes"}
+                    melted["Response"] = pd.to_numeric(melted["Response"], errors='coerce').map(binary_map).fillna("Unknown")
+                    melted["Response"] = pd.Categorical(melted["Response"], categories=["No", "Yes", "Unknown"], ordered=True)
                 
                 if 'Grade Category' in melted.columns:
                     melted["Grade Category"] = pd.Categorical(melted["Grade Category"], categories=grade_order, ordered=True)
@@ -543,8 +550,8 @@ if df is not None:
                     if pd.api.types.is_numeric_dtype(agg_df[color_enc]):
                         use_scale = True
                 elif color_enc and data_mode not in ["Likert Scale Distribution", "Mean Value (Flexible)", "Trend of Correlation Coefficient"]:
-                        if color_enc in df.columns and pd.api.types.is_numeric_dtype(df[color_enc]) and len(df[color_enc].unique()) > 10:
-                            use_scale = True
+                    if color_enc in df.columns and pd.api.types.is_numeric_dtype(df[color_enc]) and len(df[color_enc].unique()) > 10:
+                        use_scale = True
                 
                 if use_scale:
                     scale_opts = ["Viridis", "Plasma", "Inferno", "Magma", "Cividis", "Blues", "Reds", "Greens"]
