@@ -29,7 +29,7 @@ likert_mapping = {
     4: "Agree",
     5: "Strongly Agree"
 }
-# Logical order for sorting
+# Logical order for sorting legends (not data values)
 likert_order = ["Strongly Disagree", "Disagree", "Neutral", "Agree", "Strongly Agree"]
 grade_order = ["Excellent", "Very Good", "Good", "Average", "Satistfactory", "Fail", "Unknown"]
 
@@ -266,6 +266,13 @@ if df is not None:
             horizontal=True
         )
 
+        # --- NEW GLOBAL SORTING ORDER ---
+        sort_order = st.radio(
+            "Sort Data Order:",
+            ["None (Default)", "Ascending (Low to High)", "Descending (High to Low)"],
+            horizontal=True
+        )
+
         # --- PRE-PLOT CALCULATION BLOCKS ---
         plot_df = pd.DataFrame()
         local_corr_df = pd.DataFrame()
@@ -290,9 +297,6 @@ if df is not None:
                         options=numeric_cols,
                         index=numeric_cols.index(grade_col_name) if grade_col_name in numeric_cols else 0
                     )
-                    # Sorting Option
-                    sort_mode = st.radio("Sort Results by Correlation:", ["Descending", "Ascending", "None"], index=0, horizontal=True)
-
                 with c_input2:
                     # Select Attributes
                     corr_attr_vars = st.multiselect(
@@ -311,13 +315,6 @@ if df is not None:
                     st.caption("ℹ️ Note: Correlation flipped (-1) assuming lower Grade = better performance.")
                     
                 local_corr_df = pd.DataFrame({'Attribute': local_corr.index, 'Correlation': local_corr.values})
-                
-                # Apply Sorting
-                if sort_mode == "Descending":
-                    local_corr_df = local_corr_df.sort_values("Correlation", ascending=False)
-                elif sort_mode == "Ascending":
-                    local_corr_df = local_corr_df.sort_values("Correlation", ascending=True)
-                
                 plot_df = local_corr_df # Assign to main plotter df
 
         # B. SETUP FOR LIKERT
@@ -347,8 +344,11 @@ if df is not None:
             st.markdown("---")
             col_lik_1, col_lik_2 = st.columns(2)
             with col_lik_1:
-                # --- NEW OPTION ADDED HERE ---
-                likert_label_mode = st.radio("Response Labels:", ["Likert 5-Point (Strongly Disagree...)", "Binary (No / Yes)", "Numeric Values"])
+                # --- UPDATED RESPONSE LABELS ---
+                likert_label_mode = st.radio(
+                    "Response Labels:", 
+                    ["Likert 5-Point (Strongly Disagree...)", "Binary (No / Yes)", "Binary (Yes Only)", "Binary (No Only)", "Numeric Values"]
+                )
             with col_lik_2:
                 likert_val_type = st.selectbox("Value Type:", ["Count", "Percentage"])
 
@@ -380,14 +380,21 @@ if df is not None:
 
                 melted = subset.melt(id_vars=['Grade Category'], var_name="Question", value_name="Response")
                 
-                # --- UPDATED MAPPING LOGIC ---
+                # MAPPING LOGIC
                 if likert_label_mode == "Likert 5-Point (Strongly Disagree...)":
                     melted["Response"] = pd.to_numeric(melted["Response"], errors='coerce').map(likert_mapping).fillna("Unknown")
                     melted["Response"] = pd.Categorical(melted["Response"], categories=likert_order + ["Unknown"], ordered=True)
                 
-                elif likert_label_mode == "Binary (No / Yes)":
+                elif "Binary" in likert_label_mode: # Handles No/Yes, Yes Only, No Only
                     binary_map = {0: "No", 1: "Yes"}
                     melted["Response"] = pd.to_numeric(melted["Response"], errors='coerce').map(binary_map).fillna("Unknown")
+                    
+                    # --- FILTERING LOGIC ---
+                    if likert_label_mode == "Binary (Yes Only)":
+                        melted = melted[melted["Response"] == "Yes"]
+                    elif likert_label_mode == "Binary (No Only)":
+                        melted = melted[melted["Response"] == "No"]
+                        
                     melted["Response"] = pd.Categorical(melted["Response"], categories=["No", "Yes", "Unknown"], ordered=True)
                 
                 if 'Grade Category' in melted.columns:
@@ -403,9 +410,6 @@ if df is not None:
                     totals = plot_df.groupby(likert_xaxis_var, observed=True)["Count"].transform("sum")
                     plot_df["Percentage"] = (plot_df["Count"] / totals) * 100
                 
-                if likert_xaxis_var == "Response": plot_df = plot_df.sort_values(likert_xaxis_var)
-                elif likert_xaxis_var == "Grade Category": plot_df = plot_df.sort_values(likert_xaxis_var)
-                
                 for col in plot_df.select_dtypes(include=['category']).columns:
                     plot_df[col] = plot_df[col].cat.remove_unused_categories()
 
@@ -414,13 +418,13 @@ if df is not None:
                     plot_df = df['Grade Category'].value_counts().reset_index()
                     plot_df.columns = ['Grade Category', 'Count']
                     plot_df['Grade Category'] = pd.Categorical(plot_df['Grade Category'], categories=grade_order, ordered=True)
-                    plot_df = plot_df.sort_values('Grade Category')
-                    plot_df = plot_df[plot_df['Count'] > 0]
-                    plot_df['Grade Category'] = plot_df['Grade Category'].cat.remove_unused_categories()
                     
                     if likert_val_type == "Percentage":
                         total = plot_df['Count'].sum()
                         plot_df['Percentage'] = (plot_df['Count'] / total) * 100
+
+                    plot_df = plot_df[plot_df['Count'] > 0]
+                    plot_df['Grade Category'] = plot_df['Grade Category'].cat.remove_unused_categories()
                     
                     if likert_color_var not in plot_df.columns:
                         likert_color_var = "Grade Category" 
@@ -603,6 +607,44 @@ if df is not None:
             try:
                 final_x = x_axis[0] if isinstance(x_axis, list) and len(x_axis)==1 else x_axis
                 final_y = y_axis[0] if isinstance(y_axis, list) and len(y_axis)==1 else y_axis
+                
+                # --- UNIVERSAL SORTING LOGIC ---
+                if sort_order != "None (Default)":
+                    is_asc = (sort_order == "Ascending (Low to High)")
+                    
+                    if data_mode == "Trend of Correlation Coefficient":
+                        plot_df = plot_df.sort_values(by="Correlation", ascending=is_asc)
+                        
+                    elif data_mode == "Count (Frequency)":
+                        plot_df = plot_df.sort_values(by="Count", ascending=is_asc)
+                        
+                    elif data_mode == "Likert Scale Distribution":
+                        # For Likert, we sort by the total count/percentage per X-group
+                        sort_metric = "Percentage" if "Percentage" in plot_df.columns else "Count"
+                        
+                        # 1. Calculate totals per X-axis group
+                        totals = plot_df.groupby(likert_xaxis_var)[sort_metric].sum().reset_index()
+                        totals = totals.sort_values(by=sort_metric, ascending=is_asc)
+                        
+                        # 2. Reorder the Categorical Type of the X-axis column
+                        sorted_cats = totals[likert_xaxis_var].tolist()
+                        plot_df[likert_xaxis_var] = pd.Categorical(plot_df[likert_xaxis_var], categories=sorted_cats, ordered=True)
+                        plot_df = plot_df.sort_values(likert_xaxis_var)
+
+                    elif data_mode == "Mean Value (Flexible)":
+                        # Sort by the first metric selected in Y-axis
+                        if final_y:
+                            sort_col = final_y if isinstance(final_y, str) else final_y[0]
+                            if sort_col in plot_df.columns:
+                                plot_df = plot_df.sort_values(by=sort_col, ascending=is_asc)
+                                
+                    elif data_mode == "Raw Data (Individual)":
+                        # Sort by Y-axis value if possible
+                        if final_y:
+                            sort_col = final_y if isinstance(final_y, str) else final_y[0]
+                            if sort_col in plot_df.columns:
+                                plot_df = plot_df.sort_values(by=sort_col, ascending=is_asc)
+                # -------------------------------
 
                 if "Pie" in graph_type or "Donut" in graph_type:
                     if isinstance(final_x, list): final_x = final_x[0]
